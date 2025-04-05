@@ -1,4 +1,4 @@
-import Matter from 'matter-js';
+import * as Matter from 'matter-js';
 
 const { Engine, Render, Runner, World, Bodies, Body, Events, Composite } = Matter;
 
@@ -50,10 +50,8 @@ const wallOptions = {
     label: 'wall',
     render: { fillStyle: '#696969' } // Dark grey walls
 };
-// Define the gate separately for easier access/recreation
-const gateDefinition = { x: 400, y: 50, w: trackWidth + wallThickness * 2, h: wallThickness, options: {...wallOptions, label: 'gate'} };
 const walls = [
-  Bodies.rectangle(gateDefinition.x, gateDefinition.y, gateDefinition.w, gateDefinition.h, gateDefinition.options), // Top wall/gate
+  Bodies.rectangle(400, 50, trackWidth + wallThickness * 2, wallThickness, {...wallOptions, label: 'gate'}), // Top wall/gate
   Bodies.rectangle(100 - wallThickness / 2, 300, wallThickness, trackHeight + startAreaHeight, wallOptions), // Left wall
   Bodies.rectangle(700 + wallThickness / 2, 300, wallThickness, trackHeight + startAreaHeight, wallOptions), // Right wall
   Bodies.rectangle(400, 600 + wallThickness / 2, trackWidth + wallThickness * 2, wallThickness, wallOptions) // Bottom wall
@@ -120,7 +118,7 @@ async function initializeWebsim() {
         // Handle custom events if needed in the future
     };
 
-}; 
+}
 
 function checkGameState(state) {
      // Handle game start
@@ -155,7 +153,8 @@ function checkGameState(state) {
             setTimeout(() => room.updateRoomState({ reset: null }), 100);
          }
      }
-}; 
+}
+
 
 // Only the "host" (first player to join) can start the game and declare winner/reset
 const isHost = () => {
@@ -163,7 +162,7 @@ const isHost = () => {
     // Sort by clientId to ensure consistent host selection
     const sortedPeerIds = Object.keys(room.peers).sort();
     return room.clientId === sortedPeerIds[0];
-}; 
+};
 
 function startGame() {
     if (gameStarted) return;
@@ -186,7 +185,7 @@ function startGame() {
 
 
     console.log("Game Started!");
-}; 
+}
 
 function displayWinner(winnerInfo) {
     // Prevent displaying winner multiple times or if game already reset locally
@@ -218,7 +217,7 @@ function displayWinner(winnerInfo) {
              room.updateRoomState({ winner: null, gameStarted: false, reset: true });
          }
      }, 5000); // Reset after 5 seconds
-}; 
+}
 
 function resetGameLocal() {
     // Prevent multiple resets stacking up
@@ -243,10 +242,15 @@ function resetGameLocal() {
     // Re-add the gate if it was removed
     const gateExists = Composite.allBodies(world).some(body => body.label === 'gate');
      if (!gateExists) {
-        // Use the stored definition to recreate the gate
-        const newGate = Bodies.rectangle(gateDefinition.x, gateDefinition.y, gateDefinition.w, gateDefinition.h, gateDefinition.options);
-        World.add(world, newGate);
-        console.log("Gate re-added.");
+        // Find the original gate definition in the walls array
+        const gateDefinition = walls.find(w => w.label === 'gate');
+        if (gateDefinition) {
+            // Re-create the gate body from its definition if needed
+            const newGate = Bodies.rectangle(gateDefinition.position.x, gateDefinition.position.y, gateDefinition.vertices[2].x - gateDefinition.vertices[0].x, gateDefinition.vertices[2].y - gateDefinition.vertices[0].y, {...gateDefinition, label: 'gate'}); // Recreate from definition props
+            World.add(world, newGate);
+        } else {
+            console.error("Could not find gate definition to re-add.");
+        }
      }
 
 
@@ -264,7 +268,8 @@ function resetGameLocal() {
     // Show instructions again
     instructionsDiv.style.display = 'block';
     console.log("Local reset complete.");
-}; 
+}
+
 
 // Function to create or update marble visuals and physics bodies
 function updateMarbles(presence) {
@@ -299,13 +304,14 @@ function updateMarbles(presence) {
         const currentStartAreaHeight = typeof startAreaHeight !== 'undefined' ? startAreaHeight : 100;
 
         const availableWidth = currentTrackWidth - currentWallThickness * 2 - currentMarbleRadius * 2;
-        const spacing = numPlayers > 1 ? availableWidth / (numPlayers - 1) : 0; // Space between centers
+        const spacing = numPlayers > 1 ? availableWidth / (numPlayers -1) : 0; // Space between centers
         const startOffsetX = 100 + currentWallThickness + currentMarbleRadius; // Left edge for first marble center
 
+        // const startX = startOffsetX + spacing * index;
          // Center marbles if only one player
         const startX = numPlayers === 1
-            ? (100 + currentTrackWidth / 2) // Center of the track horizontally
-            : (startOffsetX + spacing * index); // Position based on index
+            ? 100 + currentTrackWidth / 2 // Center of the track horizontally
+            : startOffsetX + spacing * index;
 
         const startY = 50 + currentStartAreaHeight / 2 - currentMarbleRadius - 10; // Slightly higher start
 
@@ -355,7 +361,7 @@ function updateMarbles(presence) {
         } else {
             // Game has started, ensure marble is not static (might have been set static briefly during a join/update)
              const marbleBody = marbles[clientId];
-             if(marbleBody && marbleBody.isStatic) { 
+             if(marbleBody.isStatic) {
                 console.log(`Ensuring marble for ${peerData.username} (${clientId}) is not static as game has started.`);
                 Body.setStatic(marbleBody, false);
              }
@@ -367,7 +373,7 @@ function updateMarbles(presence) {
          }
          // Ensure avatar is up-to-date (handles avatar changes)
          if(marbles[clientId] && marbles[clientId].render.sprite) {
-             const expectedTexture = peerData.avatarUrl || createPlaceholderTexture(marbles[clientId].render.fillStyle || randomColor()); 
+             const expectedTexture = peerData.avatarUrl || createPlaceholderTexture(marbles[clientId].render.fillStyle); // Use existing color if no avatar now
              if (marbles[clientId].render.sprite.texture !== expectedTexture) {
                  marbles[clientId].render.sprite.texture = expectedTexture;
              }
@@ -389,7 +395,7 @@ function updateMarbles(presence) {
             }
         }
     });
-}; 
+}
 
 // Update label positions based on marble physics bodies
 function updateLabels() {
@@ -417,13 +423,14 @@ function updateLabels() {
             labelElement.style.display = 'block'; // Make sure it's visible
         } else if (labelElement) {
              // Hide or remove label if marble body is missing
+             console.log(`Hiding label for ${clientId} as marble body is missing.`);
              labelElement.style.display = 'none';
              // Optionally remove it completely after a delay or if it persists
              // labelElement.remove();
              // delete labels[clientId];
         }
     });
-}; 
+}
 
 // --- Game Logic ---
 
@@ -485,7 +492,7 @@ function randomColor() {
         color += letters[Math.floor(Math.random() * 16)];
     }
     return color;
-}; 
+}
 
 // Creates a simple 1x1 colored pixel PNG data URL as a texture fallback
 function createPlaceholderTexture(color) {
@@ -493,10 +500,11 @@ function createPlaceholderTexture(color) {
     canvas.width = 1;
     canvas.height = 1;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = color || '#ffffff'; 
+    ctx.fillStyle = color;
     ctx.fillRect(0, 0, 1, 1);
     return canvas.toDataURL();
-}; 
+}
+
 
 // --- Start Initialization ---
 initializeWebsim();
